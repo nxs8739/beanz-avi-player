@@ -7,7 +7,6 @@ Built for a focused purpose: play compatible AVI movies from an SD adapter on or
 
 **Final release source — November 17, 2026.** This is the frozen version of the player, including the corrected wallpaper/menu framebuffer rendering. The project is considered feature-complete; no additional features are planned.
 
-> **Simple by design. Reliable by implementation!**
 
 ## Features
 
