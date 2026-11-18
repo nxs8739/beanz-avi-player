@@ -1,3 +1,4 @@
+
 # BEANZ AVI Player
 
 A lightweight, standalone **AVI/MJPEG movie player for the Nintendo GameCube**.
@@ -26,6 +27,7 @@ Built for a focused purpose: play compatible AVI movies from an SD adapter on or
 
 The final wallpaper/framebuffer build was compiled and visually approved on a **real Nintendo GameCube** on November 17, 2026. Full-length playback of compatible AVIX movies, including return to the browser at end of file, was verified during development. Multiple movies were successfully opened in succession. Both **SD2SP2** and **SD Gecko (Slot B)** have been used successfully on real hardware.
 
+- **PAL GameCube compatibility:** **Not tested.** BEANZ AVI Player v1.0 has been verified on NTSC GameCube hardware only. Video output, display positioning, audio/video synchronization, and playback performance on PAL consoles remain unverified. PAL users are welcome to report their results.
 - **SD Gecko Slot A:** mounting is implemented in the source but has **not been separately confirmed by the project's hardware tests**.
 - **Other consoles or loaders:** not claimed as tested. The intended target is the original Nintendo GameCube with a DOL loader such as Swiss.
 - **Different AVI encoders, unusual container layouts, SD card adapters and speed grades:** compatibility is not guaranteed.
@@ -129,6 +131,7 @@ The following points are documented deliberately rather than hidden. **They are 
 
 ### Design limitations / compatibility boundaries
 
+- **PAL video modes:** Compatibility with PAL GameCube hardware and 50 Hz display modes has not been tested or verified.
 - **Strict codecs and timing:** MJPEG with exactly 20 FPS, 320-pixel width and an even video height no greater than 240. The known-good, recommended output is **320 × 240**. If PCM audio exists, it must be **32 kHz, 16-bit, mono or stereo**.
 - **AVI parser is intentionally narrow:** Sequential AVI and supported AVIX continuation are handled, but unusual indexing, nested `rec ` structures, extra streams, malformed chunk layout, non-interleaved audio, and arbitrary OpenDML arrangements are **not guaranteed** to work. AVIX continuation is sequential, **not** indexed seeking.
 - **No seek or fast-forward/rewind**, playlists, subtitles, soundtrack switching, network streaming, or file editing.
