@@ -351,7 +351,24 @@ static void play_video(const char *path){
    uint64_t last_progress=gettime();
    while(playing && pcm_sample_frames_now(&pcm)<target_samples){
     PAD_ScanPads();
-    if(PAD_ButtonsDown(0)&PAD_BUTTON_B){playing=0;break;}
+    uint32_t wait_buttons=PAD_ButtonsDown(0);
+    if(wait_buttons&PAD_BUTTON_B){playing=0;break;}
+    if(wait_buttons&PAD_BUTTON_A){
+     /* A press during the audio-clock wait must not be consumed/lost.
+        Resume the same decoded picture against the same PCM target. */
+     paused=1;pcm_set_paused(&pcm,1);
+     while(playing && paused){
+      VIDEO_WaitVSync();
+      PAD_ScanPads();uint32_t pause_buttons=PAD_ButtonsDown(0);
+      if(pause_buttons&PAD_BUTTON_B){playing=0;break;}
+      if(pause_buttons&PAD_BUTTON_A){
+       paused=0;pcm_set_paused(&pcm,0);
+       last_samples=pcm_sample_frames_now(&pcm);
+       last_progress=gettime(); /* exclude time spent paused from watchdog */
+      }
+     }
+     if(!playing)break;
+    }
     pcm_prepare(&pcm);
     uint64_t samples=pcm_sample_frames_now(&pcm);
     if(samples>=target_samples)break;

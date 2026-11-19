@@ -10,23 +10,44 @@
 
 static PCMAudio *volatile active_pcm;
 
+/* AID fires when a DMA transfer starts (and latches the next transfer's
+   registers), not when its audio has finished playing.  Keep both the active
+   and next transfers owned until the following start interrupt. */
+static void dma_queue_next(PCMAudio *p){
+ if(p->queued_slot==PCM_NO_QUEUED){
+  uint32_t next=p->next_slot;
+  if(p->state[next]==1u){
+   p->state[next]=2u;
+   p->queued_slot=(int)next;
+   p->next_slot=(next+1u)%PCM_DMA_SLOTS;
+   p->queued_addr=(u32)(uintptr_t)p->dma[next];
+  }else{
+   p->queued_slot=-1;  /* silence; don't consume a ring slot */
+   p->queued_addr=(u32)(uintptr_t)p->silence;
+   p->underruns++;
+  }
+ }
+ AUDIO_InitDMA(p->queued_addr,PCM_DMA_BYTES);
+}
+
 static void dma_callback(void){
  PCMAudio *p=active_pcm;
- if(!p)return;
- /* The previous 128 ms block has finished; offer the next ready block. */
- if(p->current_slot>=0)p->state[p->current_slot]=0;
- p->done_frames+=PCM_DMA_BYTES/4u;
- uint32_t next=p->next_slot;
- if(p->state[next]==1u){
-  p->state[next]=2u;
-  p->current_slot=(int)next;
-  p->next_slot=(next+1u)%PCM_DMA_SLOTS;
-  AUDIO_InitDMA((u32)(uintptr_t)p->dma[next],PCM_DMA_BYTES);
- }else{
-  p->current_slot=-1;
-  p->underruns++;
-  AUDIO_InitDMA((u32)(uintptr_t)p->silence,PCM_DMA_BYTES);
+ if(!p || !p->running || p->paused)return;
+ /* Starting (or restarting) the current transfer is not completion. */
+ if(p->start_irq_pending){
+  p->start_irq_pending=0;
+  dma_queue_next(p);
+  return;
  }
+ /* The next queued transfer has JUST started.  Only now is the previous
+    transfer complete and its slot safe to reuse. */
+ if(p->current_slot>=0)p->state[p->current_slot]=0u;
+ p->done_frames+=(uint64_t)p->current_bytes/4u;
+ p->current_slot=p->queued_slot;
+ p->current_addr=p->queued_addr;
+ p->current_bytes=PCM_DMA_BYTES;
+ p->queued_slot=PCM_NO_QUEUED;
+ dma_queue_next(p);
 }
 
 int pcm_open(PCMAudio *p){
@@ -98,6 +119,10 @@ int pcm_start(PCMAudio *p){
  AUDIO_SetDSPSampleRate(AI_SAMPLERATE_32KHZ);
  p->done_frames=0;p->underruns=0;
  p->next_slot=1u;p->current_slot=0;p->state[0]=2u;
+ p->current_addr=(u32)(uintptr_t)p->dma[0];
+ p->current_bytes=PCM_DMA_BYTES;
+ p->queued_slot=PCM_NO_QUEUED;
+ p->start_irq_pending=1u; /* first IRQ marks transfer start */
  p->running=1;p->paused=0;
  active_pcm=p;
  AUDIO_RegisterDMACallback(dma_callback);
@@ -108,20 +133,47 @@ int pcm_start(PCMAudio *p){
 
 void pcm_set_paused(PCMAudio *p,int paused){
  if(!p->running || !!paused==!!p->paused)return;
- if(paused){AUDIO_StopDMA();p->paused=1;}
- else{AUDIO_StartDMA();p->paused=0;}
+ uint32_t level=IRQ_Disable();
+ if(paused){
+  /* Freeze the real transfer first, then capture its unread tail.
+     The DSP reports 32-byte DMA blocks; never program a zero-length DMA. */
+  uint32_t before_stop=AUDIO_GetDMABytesLeft();
+  AUDIO_StopDMA();
+  uint32_t left=AUDIO_GetDMABytesLeft();
+  /* On a DSP that clears its readable countdown when disabled, use the
+     snapshot taken immediately before stopping, with interrupts masked. */
+  if(!left)left=before_stop;
+  if(left>p->current_bytes)left=p->current_bytes;
+  left&=~31u;
+  if(!left)left=32u; /* replay at most one 0.25 ms DMA block */
+  uint32_t played=p->current_bytes-left;
+  p->done_frames+=(uint64_t)played/4u;
+  p->current_addr+=played;
+  p->current_bytes=left;
+  p->paused=1;
+ }else{
+  /* DMA enable relatches address/length. Resume the unread tail of the
+     SAME buffer, then re-arm the previously queued next transfer in its
+     start interrupt. No audio slot is released by a restart interrupt. */
+  AUDIO_InitDMA(p->current_addr,p->current_bytes);
+  p->start_irq_pending=1u;
+  p->paused=0;
+  AUDIO_StartDMA();
+ }
+ IRQ_Restore(level);
 }
 
 uint64_t pcm_sample_frames_now(PCMAudio *p){
  if(!p->running)return 0;
- uint32_t level,left;
+ uint32_t level,left,bytes;
  uint64_t completed;
  level=IRQ_Disable();
  completed=p->done_frames;
- left=AUDIO_GetDMABytesLeft();
+ bytes=p->current_bytes;
+ left=p->paused?bytes:AUDIO_GetDMABytesLeft();
  IRQ_Restore(level);
- if(left>PCM_DMA_BYTES)left=PCM_DMA_BYTES;
- return completed+(uint64_t)(PCM_DMA_BYTES-left)/4u;
+ if(left>bytes)left=bytes;
+ return completed+(uint64_t)(bytes-left)/4u;
 }
 
 uint32_t pcm_underruns(const PCMAudio *p){return p->underruns;}

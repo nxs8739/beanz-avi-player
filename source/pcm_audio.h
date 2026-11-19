@@ -10,16 +10,21 @@
 #define PCM_DMA_BYTES        (16u * 1024u)    /* 128 ms per DMA block */
 #define PCM_DMA_SLOTS        4u
 #define PCM_RAW_SCRATCH      8192u
+#define PCM_NO_QUEUED       (-2)
 
 typedef struct {
  unsigned char *ring;       /* Main-thread-only normalized BE stereo PCM FIFO */
  size_t write_pos,read_pos,used;
  unsigned char *dma[PCM_DMA_SLOTS];
  unsigned char *silence;
- volatile uint32_t state[PCM_DMA_SLOTS]; /* 0 free, 1 ready, 2 playing */
+ volatile uint32_t state[PCM_DMA_SLOTS]; /* 0 free, 1 ready, 2 DMA-owned */
  uint32_t write_slot;
  volatile uint32_t next_slot;
- volatile int current_slot;
+ volatile int current_slot;   /* DMA actually being consumed, -1 = silence */
+ volatile int queued_slot;    /* next DMA; -1 silence, -2 not armed */
+ volatile uint32_t current_addr,current_bytes;
+ volatile uint32_t queued_addr;
+ volatile uint32_t start_irq_pending;
  volatile uint64_t done_frames;
  volatile uint32_t underruns;
  int running, paused;
