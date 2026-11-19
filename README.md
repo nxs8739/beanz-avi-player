@@ -55,12 +55,12 @@ With FFmpeg installed on a computer, a starting point for creating a compatible 
 
 ```bash
 ffmpeg -i input_video.mp4 \
-  -vf "fps=20,scale=320:240" \
+  -vf "fps=20,scale=320:240:force_original_aspect_ratio=decrease,pad=320:240:(ow-iw)/2:(oh-ih)/2:black,setsar=1" \
   -c:v mjpeg -q:v 7 -c:a pcm_s16le -ar 32000 -ac 2 \
   -f avi output.avi
 ```
 
-`-q:v 7` is a quality setting that performed well in the project's real-hardware testing; it is **not** a universal guarantee. The conversion changes the source to a fixed 4:3 picture size (which may distort non-4:3 inputs), reduces frame rate to 20 FPS, and produces large files because the audio is uncompressed. If an input has no audio, the resulting AVI may be video-only. Test any converted file on your own hardware.
+`-q:v 7` is a quality setting that performed well in the project's real-hardware testing; it is **not** a universal guarantee. The conversion produces a fixed **320 × 240 (4:3)** video frame at **20 FPS** while preserving the source picture's display aspect ratio by fitting it inside that frame. Standard **4:3** sources fill the frame; widescreen **16:9** sources are centered with black bars above and below (letterboxing) instead of being stretched. Other aspect ratios are fitted with black bars as needed. `setsar=1` makes the output use square pixels. The command produces large files because the audio is uncompressed. If an input has no audio, the resulting AVI may be video-only. Test any converted file on your own hardware.
 
 **Media rights:** Use movies you own and are legally entitled to convert and play. No movies are distributed in this repository.
 
@@ -124,7 +124,6 @@ The following points are documented deliberately rather than hidden. **They are 
 | Issue | What to expect / workaround | Evidence |
 | --- | --- | --- |
 | **B at SD Gecko's root may switch to `sd:/`** | On `cardb:/` (and potentially `carda:/`), pressing B at the top-level directory can leave the browser pointed at `sd:/`, even if no SD2SP2 is mounted. Avoid pressing B at the root; relaunch if it happens. The `go_up()` path guard was written around `sd:/`. | Confirmed on Slot B and visible in the frozen source |
-| **A pause/resume press can be missed** | The playback audio-wait loop scans input but acts on B, not A. A brief press during that loop can be consumed without toggling pause. Press A again if the first press does nothing. | Source-code control-path limitation / reproduced in test modeling |
 | **Occasional PCM audio gaps / pops** | The player can substitute a **128 ms silence buffer** when a ready DMA audio block is unavailable. `audio gap` counts these underruns; several tests showed nonzero counters despite clean-sounding playback, while some encodes had faint pops. Exact causes of every audible artifact were **not conclusively established**. Slower SD access or demanding files can make this more likely. | Observed on real hardware; mechanism confirmed in the DMA code |
 | **Variable video pacing / skipped frames** | MJPEG decoding and synchronous SD reads cost time. The player can skip late video frames to follow the audio clock. A nonzero `slow` counter is not by itself evidence of skipped frames or an audible defect; `skip` is the skipped-frame counter. Re-encoding at the tested profile and a moderate quality setting may help. | Code behavior and real-hardware statistics |
 
