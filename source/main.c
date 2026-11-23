@@ -31,6 +31,8 @@ static int ready=0,playing=0,paused=0;
 static uint32_t frames=0;
 static char status[160]="Ready";
 static char folder[PATHCAP]="sd:/";
+/* Keep browser navigation within the volume selected at startup. */
+static char mount_root[16]="sd:/";
 static struct {char name[256];int dir;} entries[MAXFILES];
 static int count=0,selected=0,scroll=0;
 static const char *mounted_name = NULL;
@@ -166,7 +168,21 @@ static void list_files(void){
  }
  closedir(d);
 }
-static void go_up(void){size_t n=strlen(folder);if(n<5)return;while(n>0&&folder[n-1]=='/')folder[--n]=0;while(n>0&&folder[n-1]!='/')folder[--n]=0;if(n==0)strcpy(folder,"sd:/");list_files();}
+static void go_up(void){
+ size_t root_len=strlen(mount_root);
+ size_t n=strlen(folder);
+ /* B at the mounted root must not change the selected volume. */
+ if(n==root_len && strcmp(folder,mount_root)==0)return;
+ /* Recover to the selected volume if the path is outside its root. */
+ if(n<=root_len || strncmp(folder,mount_root,root_len)!=0){
+  strcpy(folder,mount_root);list_files();return;
+ }
+ if(folder[n-1]=='/')folder[--n]='\0';
+ char *p=strrchr(folder,'/');
+ if(p && (size_t)(p+1-folder)>=root_len)*(p+1)='\0';
+ else strcpy(folder,mount_root);
+ list_files();
+}
 /* Embedded wallpaper is copied only when the file browser redraws.
    It is never touched during MJPEG playback. XFB is an uncached K1 pointer. */
 extern const uint8_t beanz_wallpaper_yuyv[640u * 480u * 2u];
@@ -444,6 +460,7 @@ int main(void){
   printf("No FAT device mounted.\nCheck statuses above.\n");
   while (1) VIDEO_WaitVSync();
  }
+ strcpy(mount_root,folder);
  list_files();
  while(1){browser();PAD_ScanPads();uint32_t b=PAD_ButtonsDown(0);
   if(b&PAD_BUTTON_START)break;
