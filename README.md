@@ -25,7 +25,9 @@ Built for a focused purpose: play compatible AVI movies from an SD adapter on or
 
 The original wallpaper/framebuffer build was compiled and visually approved on a **real Nintendo GameCube** on November 17, 2026. Full-length playback of compatible AVIX movies, including return to the browser at end of file, was verified during development. Multiple movies were successfully opened in succession. Both **SD2SP2** and **SD Gecko (Slot B)** have been used successfully on real hardware.
 
-Version 1.1 addressed audio DMA pause/resume synchronization and was tested with 17 pause/resume cycles across three full-length movies on a retail GameCube, without observed persistent desynchronization. Version 1.2 corrected file-browser root-directory navigation; the updated behavior was tested successfully on **SD2SP2 (`sd:/`)**, **SD Gecko Slot B (`cardb:/`)**, and **SD Gecko Slot A (`carda:/`)** on real hardware.
+Version 1.1 addressed audio DMA pause/resume synchronization and was tested with 17 pause/resume cycles across three full-length movies on a retail GameCube, without observed persistent desynchronization. 
+
+Version 1.2 corrected file-browser root-directory navigation; the updated behavior was tested successfully on **SD2SP2 (`sd:/`)**, **SD Gecko Slot B (`cardb:/`)**, and **SD Gecko Slot A (`carda:/`)** on real hardware.
 
 - **PAL GameCube compatibility:** **Not independently tested.** BEANZ AVI Player v1.2 has been verified by the project on NTSC GameCube hardware. Video output, display positioning, audio/video synchronization, and playback performance on PAL consoles remain unverified. PAL users are welcome to report their results.
 - **Other consoles or loaders:** not claimed as tested. The intended target is the original Nintendo GameCube with a DOL loader such as Swiss.
