@@ -113,7 +113,7 @@ beanz_avi_player.dol
 
 Copy the DOL to an SD card readable by your GameCube loader (such as Swiss), launch it, and browse the SD card's `.avi` files. Only the DOL must be copied; the wallpaper is compiled into the executable.
 
-**Reproducibility note:** The seven build inputs are frozen and sufficient for this build with the required toolchain. The resulting binary does not require PNG assets. Byte-for-byte identical DOLs across computers are **not** guaranteed without matching compiler, libraries, linker configuration, and environment. A GameCube cross-compiler was not available in the packaging environment, so this GitHub-ready ZIP itself was not rebuilt here; it preserves the exact user-tested source files.
+**Reproducibility note:** The seven build inputs are frozen and sufficient for this build with the required toolchain. The resulting binary does not require PNG assets. Byte-for-byte identical DOLs across computers are **not** guaranteed without matching compiler, libraries, linker configuration, and environment.
 
 ## Known issues and limitations
 
