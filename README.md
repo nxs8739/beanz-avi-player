@@ -28,7 +28,6 @@ The original wallpaper/framebuffer build was compiled and visually approved on a
 Version 1.1 addressed audio DMA pause/resume synchronization and was tested with 17 pause/resume cycles across three full-length movies on a retail GameCube, without observed persistent desynchronization. Version 1.2 corrected file-browser root-directory navigation; the updated behavior was tested successfully on **SD2SP2 (`sd:/`)**, **SD Gecko Slot B (`cardb:/`)**, and **SD Gecko Slot A (`carda:/`)** on real hardware.
 
 - **PAL GameCube compatibility:** **Not independently tested.** BEANZ AVI Player v1.2 has been verified by the project on NTSC GameCube hardware. Video output, display positioning, audio/video synchronization, and playback performance on PAL consoles remain unverified. PAL users are welcome to report their results.
-- **SD Gecko Slot A:** mounting and root-directory navigation were confirmed during v1.2 hardware testing. This does not establish full-length movie playback testing through Slot A.
 - **Other consoles or loaders:** not claimed as tested. The intended target is the original Nintendo GameCube with a DOL loader such as Swiss.
 - **Different AVI encoders, unusual container layouts, SD card adapters and speed grades:** compatibility is not guaranteed.
 
