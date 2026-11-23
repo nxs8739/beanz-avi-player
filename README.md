@@ -5,8 +5,7 @@ A lightweight, standalone **AVI/MJPEG movie player for the Nintendo GameCube**.
 
 Built for a focused purpose: play compatible AVI movies from an SD adapter on original GameCube hardware, with a simple controller-operated file browser, 32 kHz PCM audio, sequential AVIX/OpenDML continuation, and an embedded custom wallpaper. No external artwork, configuration files, or media-player assets are needed to launch the compiled DOL.
 
-**Final release source — November 17, 2026.** This is the frozen version of the player, including the corrected wallpaper/menu framebuffer rendering. The project is considered feature-complete; no additional features are planned.
-
+**Current release: v1.2.** The initial stable release was November 17, 2026, including the corrected wallpaper/menu framebuffer rendering. The project is considered feature-complete; no additional features are planned. Targeted maintenance fixes may be released as needed.
 
 ## Features
 
@@ -24,14 +23,24 @@ Built for a focused purpose: play compatible AVI movies from an SD adapter on or
 
 ## Tested hardware and status
 
-The final wallpaper/framebuffer build was compiled and visually approved on a **real Nintendo GameCube** on November 17, 2026. Full-length playback of compatible AVIX movies, including return to the browser at end of file, was verified during development. Multiple movies were successfully opened in succession. Both **SD2SP2** and **SD Gecko (Slot B)** have been used successfully on real hardware.
+The original wallpaper/framebuffer build was compiled and visually approved on a **real Nintendo GameCube** on November 17, 2026. Full-length playback of compatible AVIX movies, including return to the browser at end of file, was verified during development. Multiple movies were successfully opened in succession. Both **SD2SP2** and **SD Gecko (Slot B)** have been used successfully on real hardware.
 
-- **PAL GameCube compatibility:** **Not tested.** BEANZ AVI Player v1.0 has been verified on NTSC GameCube hardware only. Video output, display positioning, audio/video synchronization, and playback performance on PAL consoles remain unverified. PAL users are welcome to report their results.
-- **SD Gecko Slot A:** mounting is implemented in the source but has **not been separately confirmed by the project's hardware tests**.
+Version 1.1 addressed audio DMA pause/resume synchronization and was tested with 17 pause/resume cycles across three full-length movies on a retail GameCube, without observed persistent desynchronization. Version 1.2 corrected file-browser root-directory navigation; the updated behavior was tested successfully on **SD2SP2 (`sd:/`)**, **SD Gecko Slot B (`cardb:/`)**, and **SD Gecko Slot A (`carda:/`)** on real hardware.
+
+- **PAL GameCube compatibility:** **Not independently tested.** BEANZ AVI Player v1.2 has been verified by the project on NTSC GameCube hardware. Video output, display positioning, audio/video synchronization, and playback performance on PAL consoles remain unverified. PAL users are welcome to report their results.
+- **SD Gecko Slot A:** mounting and root-directory navigation were confirmed during v1.2 hardware testing. This does not establish full-length movie playback testing through Slot A.
 - **Other consoles or loaders:** not claimed as tested. The intended target is the original Nintendo GameCube with a DOL loader such as Swiss.
 - **Different AVI encoders, unusual container layouts, SD card adapters and speed grades:** compatibility is not guaranteed.
 
-The on-screen heading still says **`EXPERIMENTAL VIDEO TEST`**, a historical label intentionally retained in the frozen source. It does not mean this repository is a separate experimental version.
+The on-screen heading still says **`EXPERIMENTAL VIDEO TEST`**, a historical label intentionally retained in the current source. It does not mean this repository is a separate experimental version.
+
+## Release maintenance history
+
+- **v1.0 — Initial release:** AVI/MJPEG/PCM playback, supported AVIX continuation, file browsing, and embedded wallpaper.
+- **v1.1 — Playback stability update:** corrected PCM audio DMA pause/resume handling and playback-clock accounting to address A/V synchronization drift after repeated pause/resume operations.
+- **v1.2 — SD Gecko navigation fix:** corrected the root-directory boundary handling so repeated B presses at `carda:/` or `cardb:/` do not navigate above the mounted device root or incorrectly switch to `sd:/`. Root-navigation behavior was tested on all three supported storage paths.
+
+These are targeted maintenance releases. No new features were introduced in v1.1 or v1.2.
 
 ## Supported media profile
 
@@ -70,7 +79,7 @@ ffmpeg -i input_video.mp4 \
 | --- | --- | --- |
 | File browser | D-pad Up / Down | Move selection |
 | File browser | A | Open a directory or play the selected AVI |
-| File browser | B | Go to parent directory (see known SD Gecko root issue below) |
+| File browser | B | Go to parent directory; remain at the mounted device root when already at its top level |
 | File browser | START | Exit the application / return control to the loader |
 | Playback | A | Pause / resume |
 | Playback | B | Stop playback and return to the file browser |
@@ -85,7 +94,7 @@ At startup, the player tries to mount the first available FAT device in this ord
 2. **SD Gecko Slot B** (`cardb:/`)
 3. **SD Gecko Slot A** (`carda:/`)
 
-Only the **first successfully mounted device** is browsed. There is no in-app device switcher or hot-swap flow. FAT media must be accessible through the installed toolchain's libfat / GameCube SD drivers. SD2SP2 and SD Gecko Slot B have been tested successfully on real hardware; the Slot A branch remains unverified.
+Only the **first successfully mounted device** is browsed. There is no in-app device switcher or hot-swap flow. FAT media must be accessible through the installed toolchain's libfat / GameCube SD drivers. SD2SP2 and SD Gecko Slots A and B were successfully tested for root-directory navigation on real hardware in v1.2.
 
 ## Build from source
 
@@ -113,23 +122,22 @@ beanz_avi_player.dol
 
 Copy the DOL to an SD card readable by your GameCube loader (such as Swiss), launch it, and browse the SD card's `.avi` files. Only the DOL must be copied; the wallpaper is compiled into the executable.
 
-**Reproducibility note:** The seven build inputs are frozen and sufficient for this build with the required toolchain. The resulting binary does not require PNG assets. Byte-for-byte identical DOLs across computers are **not** guaranteed without matching compiler, libraries, linker configuration, and environment.
+**Reproducibility note:** The seven build inputs are sufficient for the current source with the required toolchain. The resulting binary does not require PNG assets. Byte-for-byte identical DOLs across computers are **not** guaranteed without matching compiler, libraries, linker configuration, and environment.
 
 ## Known issues and limitations
 
-The following points are documented deliberately rather than hidden. **They are not a request to change the frozen release.** Some are confirmed by real-hardware tests; others are identifiable source-code constraints or observed edge cases that remain unproven on every device.
+The following points are documented deliberately rather than hidden. **They are not a request to change the feature-complete application.** Some are confirmed by real-hardware tests; others are identifiable source-code constraints or observed edge cases that remain unproven on every device.
 
 ### Known issues
 
 | Issue | What to expect / workaround | Evidence |
 | --- | --- | --- |
-| **B at SD Gecko's root may switch to `sd:/`** | On `cardb:/` (and potentially `carda:/`), pressing B at the top-level directory can leave the browser pointed at `sd:/`, even if no SD2SP2 is mounted. Avoid pressing B at the root; relaunch if it happens. The `go_up()` path guard was written around `sd:/`. | Confirmed on Slot B and visible in the frozen source |
 | **Occasional PCM audio gaps / pops** | The player can substitute a **128 ms silence buffer** when a ready DMA audio block is unavailable. `audio gap` counts these underruns; several tests showed nonzero counters despite clean-sounding playback, while some encodes had faint pops. Exact causes of every audible artifact were **not conclusively established**. Slower SD access or demanding files can make this more likely. | Observed on real hardware; mechanism confirmed in the DMA code |
 | **Variable video pacing / skipped frames** | MJPEG decoding and synchronous SD reads cost time. The player can skip late video frames to follow the audio clock. A nonzero `slow` counter is not by itself evidence of skipped frames or an audible defect; `skip` is the skipped-frame counter. Re-encoding at the tested profile and a moderate quality setting may help. | Code behavior and real-hardware statistics |
 
 ### Design limitations / compatibility boundaries
 
-- **PAL video modes:** Compatibility with PAL GameCube hardware and 50 Hz display modes has not been tested or verified.
+- **PAL video modes:** Compatibility with PAL GameCube hardware and 50 Hz display modes has not been independently tested or verified by the project.
 - **Strict codecs and timing:** MJPEG with exactly 20 FPS, 320-pixel width and an even video height no greater than 240. The known-good, recommended output is **320 × 240**. If PCM audio exists, it must be **32 kHz, 16-bit, mono or stereo**.
 - **AVI parser is intentionally narrow:** Sequential AVI and supported AVIX continuation are handled, but unusual indexing, nested `rec ` structures, extra streams, malformed chunk layout, non-interleaved audio, and arbitrary OpenDML arrangements are **not guaranteed** to work. AVIX continuation is sequential, **not** indexed seeking.
 - **No seek or fast-forward/rewind**, playlists, subtitles, soundtrack switching, network streaming, or file editing.
@@ -156,7 +164,7 @@ The status is compact and may wrap on some TVs. Counters are diagnostics, not a 
 
 ### Build warnings
 
-The frozen source may emit warnings about unused declarations, integer signedness, indentation, or bounded-string handling; a successful build still ends with the `.dol` output. A `Clock skew detected` message can arise from extracted ZIP timestamps and is unrelated to the movie player. These warnings are documented rather than fixed to avoid changing the approved code.
+The current source may emit warnings about unused declarations, integer signedness, indentation, or bounded-string handling; a successful build still ends with the `.dol` output. A `Clock skew detected` message can arise from extracted ZIP timestamps and is unrelated to the movie player. These warnings are documented rather than fixed to avoid unrelated changes to the tested code.
 
 ## Project structure
 
@@ -176,7 +184,7 @@ BEANZ-AVI-Player/
     └── beanz_wallpaper.c  # Embedded 640 × 480 YUYV wallpaper data
 ```
 
-The entire runtime wallpaper is contained in `source/beanz_wallpaper.c`. The source PNGs and previous test patches are intentionally **not** part of this final minimal release. There are **seven original build files**, plus the four GitHub documentation/housekeeping files.
+The entire runtime wallpaper is contained in `source/beanz_wallpaper.c`. The source PNGs and previous test patches are intentionally **not** part of the current minimal source release. There are **seven original build files**, plus the four GitHub documentation/housekeeping files.
 
 ## Credits and licensing
 
@@ -186,4 +194,4 @@ The entire runtime wallpaper is contained in `source/beanz_wallpaper.c`. The sou
 
 Original project source/documentation is released under the **MIT License**; see [`LICENSE`](LICENSE). External dependencies remain under their own licenses. This project is **unofficial** and is **not affiliated with, endorsed by, or sponsored by Nintendo**. Nintendo and GameCube names/logos are trademarks of their respective owners; the presence of themed artwork does not grant trademark rights. No proprietary Nintendo SDK or copyrighted movies are included.
 
-**Release approach:** frozen, small, source-available. New features are not part of this release's scope.
+**Release approach:** feature-complete, small, source-available, and maintained through targeted fixes. New features are not part of the project's planned scope.
