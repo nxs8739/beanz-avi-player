@@ -9,10 +9,15 @@
 #define PREFETCH_BYTES_PER_MS 600u
 #define PREFETCH_GUARD_MS 8u
 #define FCC(a,b,c,d) ((uint32_t)(a)|((uint32_t)(b)<<8)|((uint32_t)(c)<<16)|((uint32_t)(d)<<24))
+/* Read a little-endian 32-bit value from an unaligned byte array. */
 static uint32_t rd32(const unsigned char *p){return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);}
+/* Read a little-endian 16-bit value from an unaligned byte array. */
 static uint16_t rd16(const unsigned char *p){return (uint16_t)(p[0]|(p[1]<<8));}
+/* Read one RIFF chunk identifier and payload length from the file. */
 static int hdr(FILE *f,uint32_t *id,uint32_t *sz){unsigned char b[8];if(fread(b,1,8,f)!=8)return 0;*id=rd32(b);*sz=rd32(b+4);return 1;}
+/* Compute the payload end offset, rejecting lengths above the supported signed range. */
 static long endpos(long start,uint32_t size){if(size>0x7fffffffU)return -1;return start+(long)size;}
+/* Inspect stream headers and formats to discover supported MJPEG and PCM streams. */
 static void parse_strl(AVI *a,long end){
  FILE *f=a->f;uint32_t stream_type=0,stream_handler=0,stream_num=0;uint32_t rate=0,scale=0;
  /* Determine stream index from caller, supplied via audio/video IDs later. */
@@ -31,6 +36,7 @@ static void parse_strl(AVI *a,long end){
  fseek(f,next+(n&1),SEEK_SET);pos=ftell(f);
  }
 }
+/* Open a read-only AVI, parse its stream metadata, validate the profile and allocate its sequential cache. */
 int avi_open(AVI *a,const char *path,char *err,size_t errlen){
  memset(a,0,sizeof(*a));snprintf(err,errlen,"Invalid AVI");a->f=fopen(path,"rb");if(!a->f){snprintf(err,errlen,"Cannot open AVI");return 0;}
  FILE *f=a->f;unsigned char riff[12];if(fread(riff,1,12,f)!=12||rd32(riff)!=FCC('R','I','F','F')||rd32(riff+8)!=FCC('A','V','I',' '))goto fail;
@@ -65,6 +71,7 @@ fail:avi_close(a);return 0;
    [cache_start, cache_start + cache_length). cache_consumed records the highest
    offset already delivered to the caller, so those bytes can be discarded.
    Only this single thread touches the FILE* and the cache. */
+/* Discard consumed cache bytes while preserving unread bytes and their absolute file offset. */
 static void avi_compact(AVI *a) {
  size_t drop=a->cache_consumed;
  if(drop==0)return;
@@ -74,6 +81,7 @@ static void avi_compact(AVI *a) {
  a->cache_length=keep;
  a->cache_consumed=0;
 }
+/* Reset the input cache to an empty window at the requested absolute file offset. */
 static void avi_reset_window(AVI *a,long pos) {
  a->cache_start=pos;
  a->cache_length=0;
@@ -81,6 +89,7 @@ static void avi_reset_window(AVI *a,long pos) {
 }
 /* Counts time spent seeking AND reading; reported separately from time spent
    scanning AVI chunks and copying data into jpegdata. */
+/* Read a bounded span into the cache and record refill timing and byte counts. */
 static size_t avi_fill(AVI *a,long pos,size_t count,int prefetch) {
  uint64_t t0=gettime();
  if(fseek(a->f,pos,SEEK_SET))return 0;
@@ -93,6 +102,7 @@ static size_t avi_fill(AVI *a,long pos,size_t count,int prefetch) {
  if(got)a->cache_length+=got;
  return got;
 }
+/* Serve an absolute byte range from the cache, refilling as necessary within the current movi region. */
 static int avi_cached_read(AVI *a,long pos,void *dest,size_t n) {
  unsigned char *out=(unsigned char *)dest;
  if(!a || !a->f || !a->read_ahead)return 0;
@@ -131,6 +141,7 @@ static int avi_cached_read(AVI *a,long pos,void *dest,size_t n) {
    is the measured time until the next presentation target. SD read latency
    varies, so an estimate cannot guarantee a read completes by the deadline.
    A video frame >128 KiB still requires synchronous reads while decoding. */
+/* Perform optional synchronous cache read-ahead within the estimated remaining presentation time. */
 int avi_prefetch(AVI *a,uint32_t available_ms) {
  if(!a || !a->f || !a->read_ahead)return 0;
  if(available_ms<=PREFETCH_GUARD_MS+7u)return 0;
@@ -155,6 +166,7 @@ int avi_prefetch(AVI *a,uint32_t available_ms) {
 /* Move only between validated RIFF chunks; never scan video bytes for AVIX.
    Skip index chunks following movi by seeking to the enclosing RIFF end.
    This is sequential playback, not indexed seeking. */
+/* Locate the next sequential AVIX segment and reset the cursor to its validated movi list. */
 static int avi_advance_avix(AVI *a) {
  FILE *f=a->f;
  long start=a->riff_end+(a->riff_end&1);
@@ -188,17 +200,19 @@ static int avi_advance_avix(AVI *a) {
  }
  return 0;
 }
+/* Return the next AVI chunk, following supported rec lists and sequential AVIX segments. */
 int avi_next(AVI *a,AVIChunk *out){
  while(a->cursor+8<=a->movi_end){
   unsigned char b[8];
-  if(!avi_cached_read(a,a->cursor,b,sizeof(b)))return 0;
+  if(!avi_cached_read(a,a->cursor,b,sizeof(b))){a->read_error=1;return 0;}
   uint32_t id=rd32(b),n=rd32(b+4);
   long data=a->cursor+8,next=endpos(data,n);
-  if(next<0||next>a->movi_end)return 0;
+  if(next<0||next>a->movi_end){a->read_error=1;return 0;}
   a->cursor=next+(n&1);
   if(id==FCC('L','I','S','T')&&n>=4){
    unsigned char t[4];
-   if(avi_cached_read(a,data,t,sizeof(t))&&rd32(t)==FCC('r','e','c',' ')){
+   if(!avi_cached_read(a,data,t,sizeof(t))){a->read_error=1;return 0;}
+   if(rd32(t)==FCC('r','e','c',' ')){
     a->cursor=data+4;
     continue;
    }
@@ -206,16 +220,20 @@ int avi_next(AVI *a,AVIChunk *out){
   out->id=id;out->size=n;out->data_pos=data;return 1;
  }
  if(avi_advance_avix(a))return avi_next(a,out);
+ if(ferror(a->f) || a->file_end-(a->riff_end+(a->riff_end&1))>=12)a->read_error=1;
  return 0;
 }
+/* Read an entire chunk into a caller-supplied buffer, respecting its capacity. */
 int avi_read(AVI *a,const AVIChunk *c,void *dest,size_t cap){
  if(c->size>cap)return 0;
  return avi_cached_read(a,c->data_pos,dest,c->size);
 }
+/* Read a validated subsection of an AVI chunk without allocating a whole-chunk buffer. */
 int avi_read_part(AVI *a,const AVIChunk *c,size_t offset,void *dest,size_t n){
  if(offset>c->size || n>(size_t)c->size-offset)return 0;
  return avi_cached_read(a,c->data_pos+(long)offset,dest,n);
 }
+/* Close the file, free its cache and reset the reader state. */
 void avi_close(AVI *a){
  if(a->f)fclose(a->f);
  free(a->read_ahead);

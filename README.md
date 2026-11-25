@@ -1,47 +1,35 @@
+# BEANZ AVI Player v1.3
 
-# BEANZ AVI Player
+**Simple by design. Reliable by implementation.**
 
-A lightweight, standalone **AVI/MJPEG movie player for the Nintendo GameCube**.
-
-Built for a focused purpose: play compatible AVI movies from an SD adapter on original GameCube hardware, with a simple controller-operated file browser, 32 kHz PCM audio, sequential AVIX/OpenDML continuation, and an embedded custom wallpaper. No external artwork, configuration files, or media-player assets are needed to launch the compiled DOL.
-
-**Current release: v1.2.** The initial stable release was November 17, 2026, including the corrected wallpaper/menu framebuffer rendering. The project is considered feature-complete; no additional features are planned. Targeted maintenance fixes may be released as needed.
+A lightweight, standalone AVI/MJPEG movie player for the Nintendo GameCube. Version 1.3 improves playback reliability while preserving the focused interface, embedded wallpaper, controller controls and supported media profile.
 
 ## Features
 
-- AVI playback with **MJPEG video at 320 × 240, 20 frames/second** (the tested encoding profile).
-- **32,000 Hz, 16-bit uncompressed PCM** audio; stereo is supported, and mono audio is duplicated to both output channels.
-- Video-only AVI playback when no audio stream is present.
-- Sequential playback across supported **OpenDML `AVIX` RIFF segments**, allowing compatible long AVI files to continue past the initial RIFF's movie data.
-- Audio DMA used as the presentation clock for movies with PCM audio; on-time playback is prioritized over rendering every late frame.
-- Bounded SD read-ahead, audio preroll, and buffered PCM playback.
-- FAT SD media access via **SD2SP2** or **SD Gecko**.
-- Simple file browser: directories and `.avi` files only.
-- Purple GameCube-themed menu wallpaper embedded in `source/beanz_wallpaper.c`; there is **no runtime PNG dependency**.
-- On-menu playback statistics after a movie ends or is stopped.
-- Single `.dol` application; no movie files or copyrighted videos are supplied.
+- MJPEG at 320 × 240, 20 FPS (recommended profile); 32 kHz 16-bit PCM stereo or mono duplicated to stereo.
+- One-second decoded video queue: 20 GX-ready frames, 3,072,000 bytes of texture storage, continuously replenished by a dedicated preparation thread.
+- PCM and video prebuffering before playback; corrected movie-audio clock excludes fallback silence and final DMA padding.
+- Independent audio read-ahead, bounded per-cursor cache, and sequential OpenDML AVIX continuation.
+- Natural EOF handling for final partial PCM blocks; emergency frame skipping retained.
+- Video-only playback through the existing single-threaded path.
+- FAT storage via SD2SP2 or SD Gecko; simple browser; embedded wallpaper; playback diagnostics retained on errors.
+- Standalone DOL; no external artwork or movie files required or supplied.
 
-## Tested hardware and status
+## Hardware validation
 
-The original wallpaper/framebuffer build was compiled and visually approved on a **real Nintendo GameCube** on November 17, 2026. Full-length playback of compatible AVIX movies, including return to the browser at end of file, was verified during development. Multiple movies were successfully opened in succession. Both **SD2SP2** and **SD Gecko (Slot B)** have been used successfully on real hardware.
+On November 24, 2026, the Trace 03 engine completed the original Cyber Chase AVI on real NTSC GameCube hardware via SD Gecko Slot B. The developer reported smooth synchronized playback and successful pause/resume. Additional movies stopped partway through reported zero skips and gaps.
 
-Version 1.1 addressed audio DMA pause/resume synchronization and was tested with 17 pause/resume cycles across three full-length movies on a retail GameCube, without observed persistent desynchronization. 
+| Observation | Trace 02 (19-minute run) | Trace 03 (full movie) |
+| --- | ---: | ---: |
+| Displayed frames | 19,756 | 87,948 |
+| Skipped frames | 3,106 | 0 |
+| Audio gaps | 0 | 0 |
+| Maximum SD read time | 152 ms | 153 ms |
+| Maximum reported VI lag | 200 ms | 33 ms |
 
-Version 1.2 corrected file-browser root-directory navigation; the updated behavior was tested successfully on **SD2SP2 (`sd:/`)**, **SD Gecko Slot B (`cardb:/`)**, and **SD Gecko Slot A (`carda:/`)** on real hardware.
+Trace 03 also reported normal EOF and zero empty-queue presentation events. These are different-duration runs, not a controlled matched benchmark or a guarantee for every file. PAL hardware, SD Gecko Slot A and v1.3-specific SD2SP2 testing are not established in this record; SD2SP2 was tested in earlier releases.
 
-- **PAL GameCube compatibility:** **Not independently tested.** BEANZ AVI Player v1.2 has been verified by the project on NTSC GameCube hardware. Video output, display positioning, audio/video synchronization, and playback performance on PAL consoles remain unverified. PAL users are welcome to report their results.
-- **Other consoles or loaders:** not claimed as tested. The intended target is the original Nintendo GameCube with a DOL loader such as Swiss.
-- **Different AVI encoders, unusual container layouts, SD card adapters and speed grades:** compatibility is not guaranteed.
-
-The on-screen heading still says **`EXPERIMENTAL VIDEO TEST`**, a historical label intentionally retained in the current source. It does not mean this repository is a separate experimental version.
-
-## Release maintenance history
-
-- **v1.0 — Initial release:** AVI/MJPEG/PCM playback, supported AVIX continuation, file browsing, and embedded wallpaper.
-- **v1.1 — Playback stability update:** corrected PCM audio DMA pause/resume handling and playback-clock accounting to address A/V synchronization drift after repeated pause/resume operations.
-- **v1.2 — SD Gecko navigation fix:** corrected the root-directory boundary handling so repeated B presses at `carda:/` or `cardb:/` do not navigate above the mounted device root or incorrectly switch to `sd:/`. Root-navigation behavior was tested on all three supported storage paths.
-
-These are targeted maintenance releases. No new features were introduced in v1.1 or v1.2.
+On November 25, 2026, the developer confirmed full playback of Balto using SD Gecko Slot B on the original v1.3 engine. The original file produced `Video extends beyond PCM EOF`, with 97,860 of 97,864 video frames displayed. The manually padded copy completed with all 97,864 frames displayed, zero reported audio gaps, skipped frames and empty-queue events, and no EOF warning. FFprobe reported 156,607,744 PCM sample frames for the padded file (792 ms beyond the video duration). This confirms the padding technique for this movie, not every file or the exact automatic command on physical hardware.
 
 ## Supported media profile
 
@@ -59,18 +47,84 @@ These are targeted maintenance releases. No new features were introduced in v1.1
 
 This is **not** a general-purpose AVI player. H.264, MPEG-4 Part 2, HEVC, AAC, MP3, AC-3, compressed audio, subtitles, and arbitrary resolutions or frame rates are outside the supported profile. File extensions alone do not establish compatibility.
 
-### Suggested FFmpeg conversion
+### Recommended FFmpeg conversion (Linux / Bash)
 
-With FFmpeg installed on a computer, a starting point for creating a compatible movie is:
+Install **FFmpeg and FFprobe** (normally distributed together), Bash 4 or newer, and standard Linux command-line utilities (`awk`, `mktemp`, `mv`, `rm`, `dirname`). On Ubuntu/Debian, FFmpeg and FFprobe are provided by the `ffmpeg` package. Run the following from the directory containing the input video, replacing the two quoted filenames on the `bash -s` line. Paste the entire block, including the final `BEANZ` delimiter. Input can be any supported container/codec that your FFmpeg build can decode. The output must be a new `.avi` file in an existing directory.
 
 ```bash
-ffmpeg -i input_video.mp4 \
+# BEANZ AVI Player - Automatic Video Conversion
+# Requires FFmpeg, FFprobe, Bash, and standard Linux command-line utilities.
+#
+# Replace "input_video.mp4" with your desired input filename.
+# Supported inputs include MP4, MKV, AVI, MOV, WMV, WebM, MPEG, and FLV.
+# Replace "output.avi" with your desired output filename.
+# The output filename must end in .avi.
+#
+# Automatically compensates for audio/video duration differences
+# and ensures a minimum two-second PCM audio safety margin.
+
+bash -s -- "input_video.mp4" "output.avi" <<'BEANZ'
+set -euo pipefail
+export LC_ALL=C
+input=$1
+output=$2
+[[ "${output,,}" == *.avi && ! -e "$output" && ! -L "$output" ]] || { echo "Choose a new .avi output filename" >&2; exit 1; }
+work=$(mktemp -d "$(dirname -- "$output")/.beanz.XXXXXX")
+trap 'rm -rf -- "$work"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+measure() {
+  ffprobe -v error -show_packets -show_entries packet=stream_index,size \
+    -of csv=p=0 "$1" | awk -F, '
+    NF != 2 || $1 !~ /^[01]$/ || $2 !~ /^[0-9]+$/ {bad=1; next}
+    $1==0 {if ($2==0) bad=1; else v++}
+    $1==1 {if ($2%4) bad=1; else a+=$2/4}
+    END {if (bad || !v) exit 1; printf "%.0f %.0f\n",v,a}'
+}
+
+ffmpeg -nostdin -xerror -n -i "$input" \
+  -map 0:V:0 -map '0:a:0?' \
   -vf "fps=20,scale=320:240:force_original_aspect_ratio=decrease,pad=320:240:(ow-iw)/2:(oh-ih)/2:black,setsar=1" \
-  -c:v mjpeg -q:v 7 -c:a pcm_s16le -ar 32000 -ac 2 \
-  -f avi output.avi
+  -c:v mjpeg -q:v 7 -pix_fmt yuvj420p \
+  -c:a pcm_s16le -ar 32000 -ac 2 -f avi "$work/converted.avi"
+
+counts=$(measure "$work/converted.avi")
+read -r frames samples <<< "$counts"
+result="$work/converted.avi"
+audio=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name \
+  -of csv=p=0 "$result")
+
+if [[ -n "$audio" ]]; then
+  target=$((frames * 1600 + 64000))
+  expected=$samples
+  if (( samples < target )); then
+    ffmpeg -nostdin -xerror -n -i "$result" \
+      -map 0:v:0 -map 0:a:0 -c:v copy -c:a pcm_s16le \
+      -ar 32000 -ac 2 -af "apad=whole_len=$target" -f avi "$work/padded.avi"
+    result="$work/padded.avi"
+    expected=$target
+  fi
+  counts=$(measure "$result")
+  read -r final_frames final_samples <<< "$counts"
+  (( final_frames == frames && final_samples == expected && final_samples >= target )) \
+    || { echo "Final stream verification failed" >&2; exit 1; }
+  awk -v v="$frames" -v a="$final_samples" 'BEGIN {printf "Verified: audio margin %.6f seconds\n", (a-v*1600)/32000}'
+else
+  echo "Video-only input: no PCM clock required."
+fi
+
+mv -n -- "$result" "$output"
+[[ ! -e "$result" ]] || { echo "Output already exists" >&2; exit 1; }
+printf 'Saved: %s\n' "$output"
+BEANZ
 ```
 
-`-q:v 7` is a quality setting that performed well in the project's real-hardware testing; it is **not** a universal guarantee. The conversion produces a fixed **320 × 240 (4:3)** video frame at **20 FPS** while preserving the source picture's display aspect ratio by fitting it inside that frame. Standard **4:3** sources fill the frame; widescreen **16:9** sources are centered with black bars above and below (letterboxing) instead of being stretched. Other aspect ratios are fitted with black bars as needed. `setsar=1` makes the output use square pixels. The command produces large files because the audio is uncompressed. If an input has no audio, the resulting AVI may be video-only. Test any converted file on your own hardware.
+The conversion preserves the recommended 320 × 240, 20 FPS, MJPEG quality 7, square-pixel, 32 kHz signed 16-bit stereo PCM profile. Widescreen sources with square pixels are letterboxed rather than stretched; other aspect ratios are fitted into the output frame. Anamorphic inputs may need separate aspect-ratio normalization. The first non-attached video stream and first audio stream are selected; subtitles and additional streams are omitted. Files without audio retain the video-only path.
+
+For audio-containing files, the command measures actual AVI packet sizes and frame counts after conversion, calculates a target of 1,600 PCM sample frames per video frame plus 64,000 extra sample frames, and adds only the silence needed for a **minimum two-second audio margin**. If sufficient audio already exists, no padding pass is needed. The second pass copies the MJPEG video without re-encoding. It verifies the final sample and frame counts before saving the output. Do not add `-shortest`. Existing output files are protected; temporary files are cleaned up. Allow enough free space for two AVI files during the padding pass, and check the filesystem's file size limit (FAT32: less than 4 GiB per file).
+
+The PCM margin is recommended to avoid premature audio-clock exhaustion when video extends beyond PCM EOF in the existing engine. It is not a guarantee against unrelated playback issues. The automatic command is host-tested; the manual audio-padding technique was separately validated on real hardware using Balto. See [release verification](docs/FINAL-V1.3-VERIFICATION.txt). The experimental native EOF fallback is not included.
 
 **Media rights:** Use movies you own and are legally entitled to convert and play. No movies are distributed in this repository.
 
@@ -80,7 +134,7 @@ ffmpeg -i input_video.mp4 \
 | --- | --- | --- |
 | File browser | D-pad Up / Down | Move selection |
 | File browser | A | Open a directory or play the selected AVI |
-| File browser | B | Go to parent directory; remain at the mounted device root when already at its top level |
+| File browser | B | Go to parent directory; remain within mounted volume |
 | File browser | START | Exit the application / return control to the loader |
 | Playback | A | Pause / resume |
 | Playback | B | Stop playback and return to the file browser |
@@ -95,7 +149,7 @@ At startup, the player tries to mount the first available FAT device in this ord
 2. **SD Gecko Slot B** (`cardb:/`)
 3. **SD Gecko Slot A** (`carda:/`)
 
-Only the **first successfully mounted device** is browsed. There is no in-app device switcher or hot-swap flow. FAT media must be accessible through the installed toolchain's libfat / GameCube SD drivers. SD2SP2 and SD Gecko Slots A and B were successfully tested for root-directory navigation on real hardware in v1.2.
+Only the **first successfully mounted device** is browsed. There is no in-app device switcher or hot-swap flow. FAT media must be accessible through the installed toolchain's libfat / GameCube SD drivers. SD2SP2 and SD Gecko Slot B have been tested successfully on real hardware; the Slot A branch remains unverified.
 
 ## Build from source
 
@@ -123,69 +177,80 @@ beanz_avi_player.dol
 
 Copy the DOL to an SD card readable by your GameCube loader (such as Swiss), launch it, and browse the SD card's `.avi` files. Only the DOL must be copied; the wallpaper is compiled into the executable.
 
-**Reproducibility note:** The seven build inputs are sufficient for the current source with the required toolchain. The resulting binary does not require PNG assets. Byte-for-byte identical DOLs across computers are **not** guaranteed without matching compiler, libraries, linker configuration, and environment.
+**Reproducibility note:** The eight build inputs retain the tested Trace 03 playback logic. The resulting binary does not require PNG assets. Byte-for-byte identical DOLs across computers are **not** guaranteed without matching compiler, libraries, linker configuration, and environment. A GameCube cross-compiler was not available in the packaging environment, so this release package was not cross-compiled here. The final package retains the same playback code, with only two documentation lines and the previously approved blank-line adjustment in the browser relative to the original v1.3 source. See [final verification](docs/FINAL-V1.3-VERIFICATION.txt).
 
-## Known issues and limitations
+## Known limitations and diagnostics
 
-The following points are documented deliberately rather than hidden. **They are not a request to change the feature-complete application.** Some are confirmed by real-hardware tests; others are identifiable source-code constraints or observed edge cases that remain unproven on every device.
+- The queue absorbs temporary latency, not indefinitely insufficient throughput. The player can still skip late frames or insert fallback audio silence under adverse conditions.
+- For audio-containing movies, use the conversion command above to ensure the PCM clock outlasts the video. Files with shorter PCM audio can still trigger `Video extends beyond PCM EOF`.
+- AVI parsing is intentionally narrow: sequential supported AVIX continuation, not indexed seeking. Unusual layouts, malformed chunks and extra streams are not guaranteed.
+- Video must be 320 pixels wide, even height 2–240 and exactly 20 FPS. PCM must be 32 kHz, 16-bit mono or stereo.
+- No seek, playlists, subtitles, network streaming, file editing or persistent settings. The browser collects at most 128 entries per directory. One mounted device per launch.
+- Startup preloads audio and up to 20 video frames; unsupported or poorly interleaved files may fail. Video-only playback retains its original path.
+- PAL, unusual storage devices and other loaders are not exhaustively tested. Console layout can vary with display modes.
 
-### Known issues
+### Understanding the post-playback diagnostics
 
-| Issue | What to expect / workaround | Evidence |
-| --- | --- | --- |
-| **Occasional PCM audio gaps / pops** | The player can substitute a **128 ms silence buffer** when a ready DMA audio block is unavailable. `audio gap` counts these underruns; several tests showed nonzero counters despite clean-sounding playback, while some encodes had faint pops. Exact causes of every audible artifact were **not conclusively established**. Slower SD access or demanding files can make this more likely. | Observed on real hardware; mechanism confirmed in the DMA code |
-| **Variable video pacing / skipped frames** | MJPEG decoding and synchronous SD reads cost time. The player can skip late video frames to follow the audio clock. A nonzero `slow` counter is not by itself evidence of skipped frames or an audible defect; `skip` is the skipped-frame counter. Re-encoding at the tested profile and a moderate quality setting may help. | Code behavior and real-hardware statistics |
+Version 1.3 deliberately retains the expanded diagnostic information used during development. After a movie finishes or is stopped, the file browser displays a summary of the playback session. If an error occurs, its message appears above the counters. The additional `TRACE` lines are available for PCM playback after audio DMA has started; video-only playback reports the basic summary instead. These are session totals and measurements, not error codes in themselves.
 
-### Design limitations / compatibility boundaries
+#### Basic playback statistics
 
-- **PAL video modes:** Compatibility with PAL GameCube hardware and 50 Hz display modes has not been independently tested or verified by the project.
-- **Strict codecs and timing:** MJPEG with exactly 20 FPS, 320-pixel width and an even video height no greater than 240. The known-good, recommended output is **320 × 240**. If PCM audio exists, it must be **32 kHz, 16-bit, mono or stereo**.
-- **AVI parser is intentionally narrow:** Sequential AVI and supported AVIX continuation are handled, but unusual indexing, nested `rec ` structures, extra streams, malformed chunk layout, non-interleaved audio, and arbitrary OpenDML arrangements are **not guaranteed** to work. AVIX continuation is sequential, **not** indexed seeking.
-- **No seek or fast-forward/rewind**, playlists, subtitles, soundtrack switching, network streaming, or file editing.
-- **Only directories and `.avi` files appear** in the browser. At most **128 entries** per directory are collected; longer listings may be truncated. Long paths/names can be skipped to keep within fixed buffers.
-- **One SD device per launch:** Device selection follows the fixed detection priority above. There is no live adapter picker.
-- **Audio startup may take a moment:** Playback fills an audio preroll buffer (about one second of stereo PCM) before starting. Very short files or poorly interleaved PCM may fail with a preload/buffer message.
-- **Fixed console layout:** The menu uses the standard libogc console with small dark character backgrounds over the embedded wallpaper. It is optimized for the tested GameCube/TV setup; other display modes and safe areas have not been exhaustively validated.
-- **No per-movie saves or persistent settings.** Playback status exists only in memory during that run.
+| Displayed field | Meaning |
+| --- | --- |
+| `fr` | Number of video frames presented by the player. At 20 FPS, a complete movie should normally display its full frame count when no frames are skipped. |
+| `avg SD/JPEG/SW` | Average preparation time per prepared frame, in milliseconds: AVI chunk scanning and reading (`SD`), JPEG decoding (`JPEG`), and conversion/reordering of decoded pixels into the GameCube GX texture layout (`SW`, swizzling). The SD measurement includes parser/cache work, not just physical SD reads. |
+| `max` (after `avg SD/JPEG/SW`) | Longest observed time for each of those three phases, in the same order, in milliseconds. The three maxima need not come from the same frame. |
+| `slow` | Number of prepared frames for which the combined read, decode and swizzle interval exceeded 50 ms (one frame period at 20 FPS). This is **not** a skipped-frame count. Buffered frames can absorb temporary delays. |
+| `fill` | Number of AVI read-cache refill operations. For PCM playback, the counts from both the video reader and the independent audio reader are combined. |
+| `max` (after `fill`) | Longest measured cache refill, including seeking and reading, in milliseconds, across both readers when PCM is active. |
+| `pf` | Successful explicit AVI cache prefetch operations. Normally zero in threaded PCM playback, which uses the independent preparation worker instead of the video-only idle-time prefetch path. Zero does not mean buffering is disabled. |
+| `audio gap` | Number of nonterminal fallback-silence DMA blocks queued because the next audio block was not ready. Each full block is 128 ms at 32 kHz. This equals the `TRACE queued` counter; a queued block is not necessarily consumed before playback stops. |
+| `skip` | Total frames deliberately dropped to recover video timing: frames discarded before preparation plus overdue prepared frames discarded by the presenter. Zero is desirable. Frames left in the queue by an early stop or error are not necessarily counted as skips. |
 
-### Reading the playback statistics
+#### Expanded PCM synchronization trace (new in v1.3)
 
-After stopping a movie or reaching normal EOF, the bottom status reports abbreviated measurements such as:
+| Displayed field | Meaning |
+| --- | --- |
+| `TRACE queued/start` | Two counts: nonterminal fallback-silence blocks queued, and nonterminal fallback-silence blocks that actually started DMA playback. Both should ideally be zero. Normal terminal silence is excluded from these two counts. |
+| `silence ... ms` | Estimated milliseconds of substitute silence consumed by DMA, including terminal fallback silence if consumed. Does not include silent samples stored in the AVI itself or the separate final-block `pad` counter. |
+| `IRQ` | Number of audio DMA callback interrupts handled while active and unpaused, including transfer-start/restart interrupts. Not a count of video frames or errors. |
+| `Gap starts ms` | Raw DMA clock positions, in milliseconds from the audio timeline's start, at which the first three nonterminal fallback-silence blocks began. `-1` means no corresponding gap start was recorded. Only the first three are displayed. |
+| `Raw/wall/media ms` | Three elapsed-time measurements, explained separately below. |
+| `VI lag ms first/last/min/max` | First, last, minimum and maximum measured video presentation lag, in milliseconds, relative to the intended frame timestamp on the PCM media clock. Sampled after the GX draw/copy and vertical-retrace wait return. Includes presentation scheduling/retrace effects; it is not a direct measurement of TV latency or audible lip-sync error. |
+| `PCM in ... fr` | Total valid PCM sample frames read into the audio FIFO, including any silence deliberately encoded into the AVI by FFmpeg. One stereo sample frame contains both channels (4 bytes at 16-bit stereo); at 32 kHz, divide this count by 32,000 to obtain the input audio duration in seconds. This counts input, not necessarily samples consumed by DMA if playback is stopped early. |
+| `pre` | Raw source PCM bytes read during initial audio preloading, before playback starts. For the recommended stereo profile, 131,072 bytes (128 KiB) represents 32,768 sample frames, or 1.024 seconds of audio. Mono uses two source bytes per sample frame and is expanded to stereo internally. |
+| `EOF` | Audio reader end-of-file flag: `1` means the PCM reader reached the end of its input; `0` means it had not reached EOF. `EOF 1` is normal after a complete movie and does not by itself indicate an error or prove all queued PCM was played. |
+| `Q prep` | Number of video frames successfully decoded and converted to GX-ready textures by the preparation thread. Compare with `fr` and `skip` when investigating playback completion. |
+| `peak` | Highest number of ready frames in the video queue; the capacity is 20 frames (one second at 20 FPS). |
+| `min` | Lowest number of ready frames observed during the presentation loop, before taking the next due frame. Zero can occur normally after the last video frame; a low minimum alone does not prove starvation. |
+| `empty VI` | Number of presentation-loop iterations where no ready frame was available and video EOF had not yet been reached. Each such iteration proceeds to a vertical-retrace wait. A zero count is desirable; this is not a count of skipped frames or all empty-queue moments. |
+| `pad ... fr` | Sample frames of internal zero padding consumed at the end of a partially filled DMA block. This alignment padding is normal and is excluded from the media clock. It is **not** the two-second PCM safety padding added to the AVI by the conversion command. |
 
-- `fr`: video frames displayed (not the number originally present in the file).
-- `avg SD/JPEG/SW`: average I/O, JPEG decode, and RGB565 tile-swizzle times in milliseconds.
-- `max ... ms`: maximum observed times in those phases.
-- `slow`: number of observed processing intervals exceeding the 50 ms target for 20 FPS; **not** the same as frames skipped.
-- `fill`: input-cache refill count; `max` near it is the longest individual refill time.
-- `pf`: proactive cache-prefetch count.
-- `audio gap`: number of DMA silence-fallback buffers (each nominally 128 ms).
-- `skip`: late video frames deliberately discarded to stay synchronized to audio.
+The three clock values in `Raw/wall/media ms` are:
 
-The status is compact and may wrap on some TVs. Counters are diagnostics, not a benchmark or guarantee of media quality.
+- **Raw:** estimated total elapsed DMA sample time, including consumed fallback silence and internal DMA padding.
+- **Wall:** hardware timebase elapsed from audio playback startup until cleanup begins; includes any user pause time, but excludes initial prebuffering and the subsequent worker join/cleanup.
+- **Media:** estimated DMA-consumed valid movie PCM time, with fallback silence and internal DMA padding subtracted. This includes silence encoded into the AVI and is the timeline used for video scheduling during PCM playback. Integer millisecond rounding and the DMA countdown/interrupt snapshot affect these measurements; differences are not necessarily accumulated A/V drift.
 
-### Build warnings
+#### How to interpret the results and report a problem
 
-The current source may emit warnings about unused declarations, integer signedness, indentation, or bounded-string handling; a successful build still ends with the `.dol` output. A `Clock skew detected` message can arise from extracted ZIP timestamps and is unrelated to the movie player. These warnings are documented rather than fixed to avoid unrelated changes to the tested code.
+For a complete PCM movie, the ideal result is the expected video frame count displayed, `skip 0`, `audio gap 0`, `TRACE queued/start 0/0`, `Gap starts ms: -1 / -1 / -1`, `empty VI 0`, and no error message. `peak 20`, `min 0` at completion, nonzero `slow`/`fill`/`IRQ` counts, and a nonzero final `pad` can all be normal. Do not assume that a slow read or a nonzero VI lag is a playback defect. If playback was manually stopped, incomplete frame counts and `EOF 0` may be expected.
 
-## Project structure
+`Video extends beyond PCM EOF` means the PCM media clock has exhausted its valid input while a video frame remains queued. Use the recommended conversion command to ensure a sufficient audio tail. The separate `PCM DMA clock stalled` error indicates that the movie PCM clock did not advance within the two-second watchdog interval during unpaused playback. Neither message alone identifies the underlying cause of a problem.
 
-```text
-BEANZ-AVI-Player/
-├── Makefile
-├── README.md
-├── LICENSE
-├── THIRD_PARTY.md
-├── .gitignore
-└── source/
-    ├── main.c             # Browser, JPEG decoding, framebuffer and playback control
-    ├── avi.c              # AVI reader, read-ahead cache and AVIX continuation
-    ├── avi.h
-    ├── pcm_audio.c        # PCM conversion, ring buffering and GameCube DMA
-    ├── pcm_audio.h
-    └── beanz_wallpaper.c  # Embedded 640 × 480 YUYV wallpaper data
-```
+If playback fails, stutters or loses synchronization, please open an issue at [github.com/nxs8739/beanz-avi-player/issues](https://github.com/nxs8739/beanz-avi-player/issues). Include a clear screenshot of the entire post-playback diagnostic area (including any error message and all `TRACE` lines), the player version, console/video mode (NTSC, PAL50 or PAL60), storage adapter and slot, conversion command or media profile, and whether playback ended naturally or was stopped manually. Describe where the issue occurred and whether it is repeatable. The counters help distinguish media duration mismatches, storage latency, audio underruns and video scheduling problems. They are diagnostic estimates, not a direct measurement of analog audio output or display latency.
 
-The entire runtime wallpaper is contained in `source/beanz_wallpaper.c`. The source PNGs and previous test patches are intentionally **not** part of the current minimal source release. There are **seven original build files**, plus the four GitHub documentation/housekeeping files.
+The source may produce compiler warnings; no warning-driven refactoring was performed in this release.
+
+## Project structure and host tests
+
+- `source/`: browser and playback (`main.c`), AVI reader (`avi.c/.h`), PCM/DMA (`pcm_audio.c/.h`), frame queue (`frame_queue.h`), embedded wallpaper (`beanz_wallpaper.c`).
+- `Makefile`: GameCube build; `tests/`: host regression harness; `docs/`: historical traces and verification results.
+- `CHANGELOG.md`, `LICENSE`, `THIRD_PARTY.md`: release history and licensing.
+
+Run `sh tests/run.sh` on Linux with GCC, pthreads, libjpeg development headers, FFmpeg, Python 3 and GNU linker tools. Use single-CPU affinity when comparing timing. The harness exercises actual playback coordination with host mocks, PCM tails, queue ownership and synthetic long-duration timing. It is not cycle-accurate GameCube emulation. Historical candidate notes predate the subsequent hardware validation; see [test limitations](docs/SYNC-TRACE-03.txt) and [historical results](docs/TEST-RESULTS.txt).
+
+The README conversion block can be tested directly using `python3 tests/test_readme_conversion.py`. It creates temporary synthetic media and checks output properties, stream data integrity, and safety behavior. For this harness, Python 3 and the listed FFmpeg/Bash dependencies are required. `bash tests/test_readme_player.sh` additionally checks two automatically converted fixtures against the host-mocked playback engine.
 
 ## Credits and licensing
 
@@ -195,4 +260,4 @@ The entire runtime wallpaper is contained in `source/beanz_wallpaper.c`. The sou
 
 Original project source/documentation is released under the **MIT License**; see [`LICENSE`](LICENSE). External dependencies remain under their own licenses. This project is **unofficial** and is **not affiliated with, endorsed by, or sponsored by Nintendo**. Nintendo and GameCube names/logos are trademarks of their respective owners; the presence of themed artwork does not grant trademark rights. No proprietary Nintendo SDK or copyrighted movies are included.
 
-**Release approach:** feature-complete, small, source-available, and maintained through targeted fixes. New features are not part of the project's planned scope.
+**Release approach:** frozen, small, source-available. New features are not part of this release's scope.

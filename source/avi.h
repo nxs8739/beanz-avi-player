@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-/* Per-open single-threaded sequential input cache. No producer thread. */
+/* Per-open sequential input cache; each cursor has a single owning thread. */
 #define AVI_READ_AHEAD (128u * 1024u)
 typedef struct {
  FILE *f;
@@ -13,6 +13,7 @@ typedef struct {
  uint32_t width,height,fps_num,fps_den,audio_rate,audio_channels,audio_bits;
  uint32_t video_id,audio_id;
  int has_video,has_audio;
+ int read_error;
  unsigned char *read_ahead;
  long cache_start;
  size_t cache_length;
