@@ -47,9 +47,9 @@ On November 25, 2026, the developer confirmed full playback of Balto using SD Ge
 
 This is **not** a general-purpose AVI player. H.264, MPEG-4 Part 2, HEVC, AAC, MP3, AC-3, compressed audio, subtitles, and arbitrary resolutions or frame rates are outside the supported profile. File extensions alone do not establish compatibility.
 
-### Recommended FFmpeg conversion (Linux / Bash)
+### Recommended FFmpeg conversion command for a single file (Linux / Bash)
 
-Install **FFmpeg and FFprobe** (normally distributed together), Bash 4 or newer, and standard Linux command-line utilities (`awk`, `mktemp`, `mv`, `rm`, `dirname`). On Ubuntu/Debian, FFmpeg and FFprobe are provided by the `ffmpeg` package. Run the following from the directory containing the input video, replacing the two quoted filenames on the `bash -s` line. Paste the entire block, including the final `BEANZ` delimiter. Input can be any supported container/codec that your FFmpeg build can decode. The output must be a new `.avi` file in an existing directory.
+Install **FFmpeg and FFprobe** (normally distributed together), Bash 4 or newer, and standard Linux command-line utilities (`awk`, `mktemp`, `mv`, `rm`, `dirname`). On Ubuntu/Debian, FFmpeg and FFprobe are provided by the `ffmpeg` package. Run the following command in its entirety (the whole thing)  from the directory containing the video, replacing the two quoted filenames on the `bash -s` line. Paste the entire block, including the final `BEANZ` delimiter. Input can be any supported container/codec that your FFmpeg build can decode. The output must be a new `.avi` file in an existing directory.
 
 ```bash
 # BEANZ AVI Player - Automatic Video Conversion
@@ -125,6 +125,158 @@ The conversion preserves the recommended 320 × 240, 20 FPS, MJPEG quality 7, sq
 For audio-containing files, the command measures actual AVI packet sizes and frame counts after conversion, calculates a target of 1,600 PCM sample frames per video frame plus 64,000 extra sample frames, and adds only the silence needed for a **minimum two-second audio margin**. If sufficient audio already exists, no padding pass is needed. The second pass copies the MJPEG video without re-encoding. It verifies the final sample and frame counts before saving the output. Do not add `-shortest`. Existing output files are protected; temporary files are cleaned up. Allow enough free space for two AVI files during the padding pass, and check the filesystem's file size limit (FAT32: less than 4 GiB per file).
 
 The PCM margin is recommended to avoid premature audio-clock exhaustion when video extends beyond PCM EOF in the existing engine. It is not a guarantee against unrelated playback issues. The automatic command is host-tested; the manual audio-padding technique was separately validated on real hardware using Balto. See [release verification](docs/FINAL-V1.3-VERIFICATION.txt). The experimental native EOF fallback is not included.
+
+### Batch conversion (Linux / Bash, optional)
+
+Use this alternative to the single-file command when converting an entire directory of movies. Install the same dependencies listed above (including Bash 4 or newer), plus the standard `mkdir` utility. Open a terminal in the directory containing your original movies and paste the entire code block below, including the final `BEANZ` delimiter. It is essential you copy the whole command! No filenames or paths need to be entered manually.
+
+The command automatically creates a directory named `Converted for GameCube` inside the current working directory and saves each successfully converted AVI there. Original movies remain untouched. For example:
+
+```text
+Movies/
+  Balto.mkv
+  Cyber Chase.mp4
+  Die Hard.mov
+  Converted for GameCube/
+    Balto.avi
+    Cyber Chase.avi
+    Die Hard.avi
+```
+
+The command recognizes the following input extensions, regardless of capitalization: `.mp4`, `.mkv`, `.avi`, `.mov`, `.wmv`, `.webm`, `.mpeg`, `.mpg`, `.flv`, `.m4v`, `.ts`, `.m2ts`, `.ogv`, and `.vob`. Actual decoding depends on the installed FFmpeg build. Only regular files directly inside the current directory are considered, including hidden files with recognized extensions. Subdirectories, symbolic links and unrelated file extensions are ignored. The output directory is not scanned.
+
+```bash
+# BEANZ AVI Player - Batch Video Conversion
+# Requires FFmpeg, FFprobe, Bash, AWK, and standard Linux utilities.
+# Open a terminal in the folder containing your movies and paste this entire block.
+# Converted files go into "Converted for GameCube"; originals are untouched.
+# Existing output files are skipped. Subdirectories are not scanned.
+bash -s <<'BEANZ'
+set -euo pipefail
+export LC_ALL=C
+for tool in ffmpeg ffprobe awk mktemp mv rm dirname mkdir; do
+  command -v "$tool" >/dev/null || { printf 'Missing required tool: %s\n' "$tool" >&2; exit 1; }
+done
+outdir='./Converted for GameCube'
+[[ ! -L "$outdir" ]] || { echo 'Output directory must not be a symbolic link.' >&2; exit 1; }
+mkdir -p -- "$outdir"
+shopt -s nullglob dotglob
+found=0; converted=0; skipped=0; failed=0
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+for input in ./*; do
+  [[ -f "$input" && ! -L "$input" ]] || continue
+  case "${input,,}" in
+    *.mp4|*.mkv|*.avi|*.mov|*.wmv|*.webm|*.mpeg|*.mpg|*.flv|*.m4v|*.ts|*.m2ts|*.ogv|*.vob) ;;
+    *) continue ;;
+  esac
+  found=$((found+1))
+  name=${input##*/}
+  output="$outdir/${name%.*}.avi"
+  if [[ -e "$output" || -L "$output" ]]; then
+    printf 'Skipped (output exists or name collision): %s\n' "$input"
+    skipped=$((skipped+1))
+    continue
+  fi
+  printf '\nConverting: %s\n' "$input"
+  # Separate Bash process keeps conversion failures isolated to this movie.
+  if bash -s -- "$input" "$output" <<'CONVERT'
+set -euo pipefail
+export LC_ALL=C
+input=$1
+output=$2
+[[ "${output,,}" == *.avi && ! -e "$output" && ! -L "$output" ]] || { echo "Choose a new .avi output filename" >&2; exit 1; }
+work=$(mktemp -d "$(dirname -- "$output")/.beanz.XXXXXX")
+trap 'rm -rf -- "$work"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+measure() {
+  ffprobe -v error -show_packets -show_entries packet=stream_index,size \
+    -of csv=p=0 "$1" | awk -F, '
+    NF != 2 || $1 !~ /^[01]$/ || $2 !~ /^[0-9]+$/ {bad=1; next}
+    $1==0 {if ($2==0) bad=1; else v++}
+    $1==1 {if ($2%4) bad=1; else a+=$2/4}
+    END {if (bad || !v) exit 1; printf "%.0f %.0f\n",v,a}'
+}
+
+ffmpeg -nostdin -xerror -n -i "$input" \
+  -map 0:V:0 -map '0:a:0?' \
+  -vf "fps=20,scale=320:240:force_original_aspect_ratio=decrease,pad=320:240:(ow-iw)/2:(oh-ih)/2:black,setsar=1" \
+  -c:v mjpeg -q:v 7 -pix_fmt yuvj420p \
+  -c:a pcm_s16le -ar 32000 -ac 2 -f avi "$work/converted.avi"
+
+counts=$(measure "$work/converted.avi")
+read -r frames samples <<< "$counts"
+result="$work/converted.avi"
+audio=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name \
+  -of csv=p=0 "$result")
+
+if [[ -n "$audio" ]]; then
+  target=$((frames * 1600 + 64000))
+  expected=$samples
+  if (( samples < target )); then
+    ffmpeg -nostdin -xerror -n -i "$result" \
+      -map 0:v:0 -map 0:a:0 -c:v copy -c:a pcm_s16le \
+      -ar 32000 -ac 2 -af "apad=whole_len=$target" -f avi "$work/padded.avi"
+    result="$work/padded.avi"
+    expected=$target
+  fi
+  counts=$(measure "$result")
+  read -r final_frames final_samples <<< "$counts"
+  (( final_frames == frames && final_samples == expected && final_samples >= target )) \
+    || { echo "Final stream verification failed" >&2; exit 1; }
+  awk -v v="$frames" -v a="$final_samples" 'BEGIN {printf "Verified: audio margin %.6f seconds\n", (a-v*1600)/32000}'
+else
+  echo "Video-only input: no PCM clock required."
+fi
+
+mv -n -- "$result" "$output"
+[[ ! -e "$result" ]] || { echo "Output already exists" >&2; exit 1; }
+printf 'Saved: %s\n' "$output"
+CONVERT
+  then
+    converted=$((converted+1))
+  else
+    status=$?
+    # Do not continue converting movies if interrupted.
+    if (( status == 130 || status == 143 )); then exit "$status"; fi
+    printf 'Failed: %s (exit %s)\n' "$input" "$status" >&2
+    failed=$((failed+1))
+  fi
+done
+printf '\nBEANZ batch conversion summary\nMovies found: %s\nConverted: %s\nSkipped: %s\nFailed: %s\nOutput directory: %s/\n' \
+  "$found" "$converted" "$skipped" "$failed" "$outdir"
+(( failed == 0 ))
+BEANZ
+```
+
+#### How batch conversion works
+
+1. **Dependency and directory checks:** The command checks for the required tools, creates the output directory if necessary, and rejects a symbolic link at the output-directory path.
+2. **Sequential processing:** Each recognized input file is converted separately, using its original basename with the extension replaced by `.avi`. Filenames containing spaces and special characters are handled without manual escaping. If the destination filename already exists, the input is skipped. If two inputs have the same basename (for example, `Balto.mp4` and `Balto.mkv`), the first successful conversion occupies that output name; later inputs targeting that name are skipped. Rename one of the originals before running the command if both versions are wanted.
+3. **Initial conversion:** FFmpeg uses the same encoding profile as the single-file command: 320 × 240, exactly 20 FPS, MJPEG quality 7, `yuvj420p`, square pixels, and 32 kHz signed 16-bit stereo PCM when audio is present. Video is fitted into the output frame with black padding as needed; the anamorphic-input caveat above also applies. Only the first non-attached video stream and first audio stream are selected. Extra streams and subtitles are omitted.
+4. **Automatic PCM length correction:** FFprobe reports the actual AVI packet sizes and stream indices. AWK counts video packets and divides the PCM byte count by four (one 16-bit stereo sample frame). The command calculates the minimum PCM target as `video_frames * 1600 + 64000`: 1,600 sample frames per video frame at 20 FPS and 32 kHz, plus two seconds of audio. If the converted audio falls short of that target, FFmpeg adds only the necessary silence at the end using `apad=whole_len`. If sufficient audio already exists, the padding pass is skipped. Existing longer audio is not trimmed. The second pass copies the MJPEG stream without re-encoding it. Video-only inputs remain video-only.
+5. **Verification and saving:** For audio-containing files, the final AVI is measured again to confirm that the video frame count is unchanged, the PCM sample count matches the expected result and the minimum two-second PCM margin is present. Video-only files undergo the initial packet-count check without an audio-margin requirement. The finished AVI is moved into the output directory without intentionally overwriting an existing file. These checks verify stream counts, not every possible media defect or pre-existing synchronization problem.
+6. **Failure isolation and cleanup:** Each movie runs in a separate Bash process. A conversion or verification failure is reported and the remaining inputs continue processing. Temporary working directories are removed on normal exit or handled interruption; abrupt termination or power loss can leave temporary files behind. Pressing Ctrl+C interrupts the batch. Originals and previously completed outputs are retained.
+
+At the end, the command prints a summary, for example:
+
+```text
+BEANZ batch conversion summary
+Movies found: 10
+Converted: 8
+Skipped: 1
+Failed: 1
+Output directory: ./Converted for GameCube/
+```
+
+`Movies found` counts recognized regular input files, not necessarily valid movies. `Converted` counts successfully saved outputs; `Skipped` counts existing output names or basename collisions; `Failed` counts unsuccessful conversions. A batch containing failures exits with a nonzero status after processing the remaining files. Running the command again skips existing outputs; it does not revalidate those files. To retry a previously converted movie, move or rename its existing output first.
+
+Allow enough free space for all finished movies plus up to two temporary AVI files for the movie currently undergoing padding. The command does not split large files or enforce the destination SD card's file size limit. Check that each AVI is smaller than 4 GiB before copying it to FAT32 storage. Do not add `-shortest`.
+
+**Batch conversion validation:** The batch command was host-tested using short synthetic non-AVI inputs, including MP4, MKV, MOV, WebM, WMV, MPG and FLV, with shorter, equal and longer audio durations, video-only input, filename collisions, existing outputs and a deliberately corrupt input. These tests do not establish full-length batch conversion or physical GameCube playback of the batch-generated fixtures. The same PCM padding technique was separately validated on real hardware as described above. This optional command requires no changes to the v1.3 DOL.
 
 **Media rights:** Use movies you own and are legally entitled to convert and play. No movies are distributed in this repository.
 
