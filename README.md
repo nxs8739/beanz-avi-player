@@ -15,6 +15,20 @@ A lightweight, standalone AVI/MJPEG movie player for the Nintendo GameCube. Vers
 - FAT storage via SD2SP2 or SD Gecko; simple browser; embedded wallpaper; playback diagnostics retained on errors.
 - Standalone DOL; no external artwork or movie files required or supplied.
 
+## Sample AVI File
+
+A pre-converted sample AVI is provided for testing BEANZ AVI Player on real Nintendo GameCube hardware.
+
+This file has been encoded using the recommended video and audio specifications, allowing users to verify playback without needing to convert their own media first.
+
+If the sample plays correctly but your own AVI files do not, verify your media conversion settings. If the sample AVI also fails to play correctly, open a GitHub issue and include a screenshot of the complete playback diagnostics, your GameCube video mode, and the storage adapter and slot being used.
+
+The sample is provided separately from the standalone DOL and is not required to run the application.
+
+**Original footage credit:** NASA's Goddard Space Flight Center.
+
+[Original NASA footage — GOLD Resources: Sarah Jones Mission Scientist](https://svs.gsfc.nasa.gov/12825)
+
 ## Hardware validation
 
 On November 24, 2026, the Trace 03 engine completed the original Cyber Chase AVI on real NTSC GameCube hardware via SD Gecko Slot B. The developer reported smooth synchronized playback and successful pause/resume. Additional movies stopped partway through reported zero skips and gaps.
@@ -279,6 +293,8 @@ Allow enough free space for all finished movies plus up to two temporary AVI fil
 **Batch conversion validation:** The batch command was host-tested using short synthetic non-AVI inputs, including MP4, MKV, MOV, WebM, WMV, MPG and FLV, with shorter, equal and longer audio durations, video-only input, filename collisions, existing outputs and a deliberately corrupt input. These tests do not establish full-length batch conversion or physical GameCube playback of the batch-generated fixtures. The same PCM padding technique was separately validated on real hardware as described above. This optional command requires no changes to the v1.3 DOL.
 
 **Media rights:** Use movies you own and are legally entitled to convert and play. No movies are distributed in this repository.
+
+**Sample AVI exception:** The separately provided NASA sample described above is intended for playback testing; no copyrighted commercial movies are distributed.
 
 ## Controls
 
