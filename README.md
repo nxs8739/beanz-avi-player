@@ -63,7 +63,7 @@ This is **not** a general-purpose AVI player. H.264, MPEG-4 Part 2, HEVC, AAC, M
 
 ### Recommended FFmpeg conversion command for a single file (Linux / Bash)
 
-Install **FFmpeg and FFprobe** (normally distributed together), Bash 4 or newer, and standard Linux command-line utilities (`awk`, `mktemp`, `mv`, `rm`, `dirname`). On Ubuntu/Debian, FFmpeg and FFprobe are provided by the `ffmpeg` package. Run the following command in its entirety (the whole thing)  from the directory containing the video, replacing the two quoted filenames on the `bash -s` line. Paste the entire block, including the final `BEANZ` delimiter. Input can be any supported container/codec that your FFmpeg build can decode. The output must be a new `.avi` file in an existing directory.
+Install **FFmpeg and FFprobe** (normally distributed together), Bash 4 or newer, and standard Linux command-line utilities (`awk`, `mktemp`, `mv`, `rm`, `dirname`). On Ubuntu/Debian, FFmpeg and FFprobe are provided by the `ffmpeg` package. Run the following command in its entirety (the whole thing) from the directory containing the video, replacing the two quoted filenames on the `bash -s` line. Paste the entire block, including the final `BEANZ` delimiter. Input can be any supported container/codec that your FFmpeg build can decode. The output must be a new `.avi` file in an existing directory.
 
 ```bash
 # BEANZ AVI Player - Automatic Video Conversion
@@ -405,6 +405,16 @@ The three clock values in `Raw/wall/media ms` are:
 For a complete PCM movie, the ideal result is the expected video frame count displayed, `skip 0`, `audio gap 0`, `TRACE queued/start 0/0`, `Gap starts ms: -1 / -1 / -1`, `empty VI 0`, and no error message. `peak 20`, `min 0` at completion, nonzero `slow`/`fill`/`IRQ` counts, and a nonzero final `pad` can all be normal. Do not assume that a slow read or a nonzero VI lag is a playback defect. If playback was manually stopped, incomplete frame counts and `EOF 0` may be expected.
 
 `Video extends beyond PCM EOF` means the PCM media clock has exhausted its valid input while a video frame remains queued. Use the recommended conversion command to ensure a sufficient audio tail. The separate `PCM DMA clock stalled` error indicates that the movie PCM clock did not advance within the two-second watchdog interval during unpaused playback. Neither message alone identifies the underlying cause of a problem.
+
+##### Video extends beyond PCM EOF
+
+Some AVI files, particularly those converted using older conversion commands without PCM audio padding, may contain a video stream that is slightly longer than their audio stream. When the PCM media clock has exhausted its valid input while video frames remain queued, the player may report:
+
+`Video extends beyond PCM EOF`
+
+**This message does not necessarily indicate a playback malfunction.** A movie can play smoothly and remain synchronized throughout, with only a few trailing video frames left undisplayed. If the message appears after the movie or credits have finished, especially when the screen is already black, it can generally be safely ignored. There is no need to reconvert an existing AVI solely because of this message if playback was otherwise satisfactory.
+
+For new conversions, use the recommended single-file or batch FFmpeg command in this README. Both automatically verify a minimum two-second PCM audio margin for files containing audio to help prevent this condition. If playback ends significantly earlier than expected or meaningful video content is cut off, verify the conversion settings and audio/video stream durations.
 
 If playback fails, stutters or loses synchronization, please open an issue at [github.com/nxs8739/beanz-avi-player/issues](https://github.com/nxs8739/beanz-avi-player/issues). Include a clear screenshot of the entire post-playback diagnostic area (including any error message and all `TRACE` lines), the player version, console/video mode (NTSC, PAL50 or PAL60), storage adapter and slot, conversion command or media profile, and whether playback ended naturally or was stopped manually. Describe where the issue occurred and whether it is repeatable. The counters help distinguish media duration mismatches, storage latency, audio underruns and video scheduling problems. They are diagnostic estimates, not a direct measurement of analog audio output or display latency.
 
